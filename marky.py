@@ -2,13 +2,16 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 import random, pdb
 
-nary = 1
+nprefix = 2
+nary = 2 
 maxwords = 20
 
-aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes'});
+aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
+            'topmost' : 'tommost' , 'TBoneULS' : 'baty' ,
+            'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'});
 
 server = 'irc.freenode.net'
-channel = "#rhtest"
+channel = "#rhnoise"
 logfile = 'fish_scraps'
 
 
@@ -45,15 +48,16 @@ class MarkBot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         if msg.startswith('.mimic'):
             author = finduser(msg.split()[1])
-            
-            if author in self.users:
+            if author is self.nickname:
+                self.msg(channel, '.slap ' + user.split('!', 1)[0])
+            elif author in self.users:
                 quote = self.users[author].spit_line()
                 self.msg(channel, '< ' + author + '> ' + quote)                
-            if not author in self.users:
+            elif not author in self.users:
                 self.msg(channel, 'sorry, ' + author + ' was not found')
 
 def buildusers():
-    users = {};
+    users = {}
 
     f = open(logfile,'r')
     for line in f:
@@ -62,7 +66,6 @@ def buildusers():
             a = finduser(s[2])
             if not a in users: 
                 users[a] = User()
-            
             w = s[3:]
             users[a].add_message(w)
     return users
@@ -79,7 +82,7 @@ def finduser(author):
     return author
 
 def linecheck(line):
-    for c in ['-!-', ' * ', '-->', '.mimic', '<--']: 
+    for c in ['-!-', ' * ', '-->', '.mimic', '<--', 'http']: 
         if c in line:
             return 0
     for c in ['-', ':']:
