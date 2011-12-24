@@ -1,27 +1,60 @@
-import re, pdb, random
-nary = 2
+from twisted.words.protocols import irc
+from twisted.internet import protocol, reactor
+import random, pdb
+
+nary = 1
 maxwords = 20
-logfile = 'fish_scraps'
 
 aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes'});
 
-users = {} 
-def main():
-    print __doc__.strip()
+server = 'irc.freenode.net'
+channel = "#rhtest"
+logfile = 'fish_scraps'
 
-def mimic(phenny, input):
-    buildusers()
-    u = input.group(2).encode("utf8")
-    a = finduser(u)
-    if a in users:
-        user = users[a]
-        phenny.say(user.spit_line())
-    if not a in users:
-        phenny.say('sorry, ' + a + ' was not found')
 
-mimic.commands = ['mimic'] 
+class MarkBotFactory(protocol.ClientFactory):
+    def __init__(self, channel, filename):
+        self.channel = channel
+        self.filename = filename 
+
+    def buildProtocol(self, addr):
+        p = MarkBot()
+        p.factory = self
+        return p
+
+    def clientConnectionLost(self, connector, reason):
+        connector.connect()
+ 
+    def clientConnectionFailed(self, connector, reason):
+        reactor.stop()
+
+
+class MarkBot(irc.IRCClient):
+    nickname = 'markbot'
+
+    def connectionMade(self):
+        irc.IRCClient.connectionMade(self)
+        self.users = buildusers()
+
+    def connectionLost(self, reason):
+        irc.IRCClient.connectionLost(self, reason)
+
+    def signedOn(self):
+        self.join(self.factory.channel)
+
+    def privmsg(self, user, channel, msg):
+        if msg.startswith('.mimic'):
+            author = finduser(msg.split()[1])
+            
+            if author in self.users:
+                quote = self.users[author].spit_line()
+                self.msg(channel, '< ' + author + '> ' + quote)                
+            if not author in self.users:
+                self.msg(channel, 'sorry, ' + author + ' was not found')
 
 def buildusers():
+    users = {};
+
     f = open(logfile,'r')
     for line in f:
         if(linecheck(line)):
@@ -31,7 +64,8 @@ def buildusers():
                 users[a] = User()
             
             w = s[3:]
-            users[a].add_message(w)  
+            users[a].add_message(w)
+    return users
     
 def finduser(author):
     author = author.lstrip(' ')
@@ -102,5 +136,6 @@ class User:
         return ' '.join(line)
 
 if __name__ == "__main__":
-    main()
-
+    f = MarkBotFactory(channel, logfile)
+    reactor.connectTCP(server, 6667, f)
+    reactor.run()

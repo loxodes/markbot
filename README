@@ -1,4 +1,3 @@
-A poorly written markov chain phenny module.
+A poorly written markov chain IRC bot using twisted.
 
-Requires the phenny.
 
