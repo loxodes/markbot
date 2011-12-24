@@ -3,8 +3,8 @@ from twisted.internet import protocol, reactor
 import random, pdb
 
 maxwords = 25
-nprefix = 2
-maxary = 2 
+nprefix = 3
+maxary = 3 
 minchoices = 2
 
 aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
@@ -12,7 +12,7 @@ aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
             'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'});
 
 server = 'irc.freenode.net'
-channel = '#rhnoise'
+channel = '#rhtest'
 logfile = 'fish_scraps'
 
 
@@ -116,7 +116,8 @@ class User:
     def spit_word(self, prefix):
         for i in range(maxary,0,-1):
             words = []
-            nxt = self.ribbons[i-1][' '.join(prefix[-i:])]
+            try: nxt = self.ribbons[i-1][' '.join(prefix[-i:])]
+            except KeyError: continue
             for n, c in nxt.iteritems():
                 for j in range(c):
                     words.append(n)
