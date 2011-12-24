@@ -1,5 +1,5 @@
 import re, pdb, random
-nary = 1
+nary = 2
 maxwords = 20
 logfile = 'fish_scraps'
 
@@ -34,9 +34,12 @@ def buildusers():
             users[a].add_message(w)  
     
 def finduser(author):
-    author = author.rstrip('_')
+    author = author.lstrip(' ')
+    author = author.rstrip(' ')
     author = author.lstrip('@')
     author = author.lstrip('+')
+    author = author.rstrip('_')
+    
     if author in aliases:
         author = aliases[author]
     return author
