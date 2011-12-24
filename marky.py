@@ -2,16 +2,17 @@ from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 import random, pdb
 
+maxwords = 25
 nprefix = 2
-nary = 2 
-maxwords = 20
+maxary = 2 
+minchoices = 2
 
 aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
             'topmost' : 'tommost' , 'TBoneULS' : 'baty' ,
             'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'});
 
 server = 'irc.freenode.net'
-channel = "#rhnoise"
+channel = '#rhnoise'
 logfile = 'fish_scraps'
 
 
@@ -37,7 +38,8 @@ class MarkBot(irc.IRCClient):
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
-        self.users = buildusers()
+        self.users = {}
+        self.buildUsers()
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
@@ -47,7 +49,7 @@ class MarkBot(irc.IRCClient):
 
     def privmsg(self, user, channel, msg):
         if msg.startswith('.mimic'):
-            author = finduser(msg.split()[1])
+            author = self.findUser(msg.split()[1])
             if author is self.nickname:
                 self.msg(channel, '.slap ' + user.split('!', 1)[0])
             elif author in self.users:
@@ -56,69 +58,70 @@ class MarkBot(irc.IRCClient):
             elif not author in self.users:
                 self.msg(channel, 'sorry, ' + author + ' was not found')
 
-def buildusers():
-    users = {}
+    def buildUsers(self):
+        f = open(logfile,'r')
+        for line in f:
+            if(self.lineCheck(line)):
+                s = line.split()
+                a = self.findUser(s[2])
+                if not a in self.users: 
+                    self.users[a] = User()
+                w = s[3:]
+                self.users[a].add_message(w)
+ 
+    def findUser(self, author):
+        author = author.lstrip(' ')
+        author = author.rstrip(' ')
+        author = author.lstrip('@')
+        author = author.lstrip('+')
+        author = author.rstrip('_')
+        
+        if author in aliases:
+            author = aliases[author]
+        return author
 
-    f = open(logfile,'r')
-    for line in f:
-        if(linecheck(line)):
-            s = line.split()
-            a = finduser(s[2])
-            if not a in users: 
-                users[a] = User()
-            w = s[3:]
-            users[a].add_message(w)
-    return users
-    
-def finduser(author):
-    author = author.lstrip(' ')
-    author = author.rstrip(' ')
-    author = author.lstrip('@')
-    author = author.lstrip('+')
-    author = author.rstrip('_')
-    
-    if author in aliases:
-        author = aliases[author]
-    return author
 
-def linecheck(line):
-    for c in ['-!-', ' * ', '-->', '.mimic', '<--', 'http']: 
-        if c in line:
-            return 0
-    for c in ['-', ':']:
-        if not c in line:
-            return 0
-    return 1;
+    def lineCheck(self, line):
+        for c in ['-!-', ' * ', '-->', '.mimic', '<--', 'http']: 
+            if c in line:
+                return 0
+        for c in ['-', ':']:
+            if not c in line:
+                return 0
+        return 1;
 
 class User:
     def __init__(self):
         self.pre = {}
-        self.ribbons = {}
+        self.ribbons = [{} for i in range(maxary)]
 
     def add_pre(self, w):
         words = ' '.join(w) 
         if not words in self.pre:
             self.pre[words] = 0
-        self.pre[words] = self.pre[words] + 1
+        self.pre[words] += + 1
 
     def add_message(self, words):
-        self.add_pre(words[0:nary])
+        self.add_pre(words[0:nprefix])
         words.append('EOL')
-        for i in range(nary, len(words)):
-            prefix = ' '.join(words[i-nary:i])
-            if not prefix in self.ribbons:
-                self.ribbons[prefix] = {}
-            if not words[i] in self.ribbons[prefix]:
-                self.ribbons[prefix][words[i]] = 0;
-            self.ribbons[prefix][words[i]] = self.ribbons[prefix][words[i]] + 1
-    
+        for j in range(1,maxary+1): 
+            for i in range(nprefix, len(words)):
+                prefix = ' '.join(words[i-j:i])
+                if not prefix in self.ribbons[j-1]:
+                    self.ribbons[j-1][prefix] = {}
+                if not words[i] in self.ribbons[j-1][prefix]:
+                    self.ribbons[j-1][prefix][words[i]] = 0;
+                self.ribbons[j-1][prefix][words[i]] += 1
+        
     def spit_word(self, prefix):
-        words = []
-        nxt = self.ribbons[' '.join(prefix)]
-        for n, c in nxt.iteritems():
-            for i in range(c):
-                words.append(n)
-
+        for i in range(maxary,0,-1):
+            words = []
+            nxt = self.ribbons[i-1][' '.join(prefix[-i:])]
+            for n, c in nxt.iteritems():
+                for j in range(c):
+                    words.append(n)
+            if(len(words) >= minchoices):
+                break
         return random.choice(words)
 
     def spit_pre(self):
@@ -130,9 +133,9 @@ class User:
 
     def spit_line(self):
         line = self.spit_pre()
-        if(len(line) == nary):
+        if(len(line) == maxary):
             for i in range(maxwords):
-                line.append(self.spit_word(line[-nary:]))
+                line.append(self.spit_word(line[-maxary:]))
                 if(line[-1] == 'EOL'):
                     line = line[0:-1]
                     break 
