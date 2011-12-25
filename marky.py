@@ -1,20 +1,18 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
-import random, pdb
+import random
 
 maxwords = 25
 nprefix = 3
 maxary = 3 
 minchoices = 2
-
-aliases = ({'alias': 'user', 'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
+aliases = ({'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
             'topmost' : 'tommost' , 'TBoneULS' : 'baty' ,
-            'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'});
+            'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'})
 
 server = 'irc.freenode.net'
-channel = '#rhtest'
+channel = '#rhnoise'
 logfile = 'fish_scraps'
-
 
 class MarkBotFactory(protocol.ClientFactory):
     def __init__(self, channel, filename):
@@ -38,8 +36,6 @@ class MarkBot(irc.IRCClient):
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
-        self.users = {}
-        self.buildUsers()
 
     def connectionLost(self, reason):
         irc.IRCClient.connectionLost(self, reason)
@@ -50,24 +46,27 @@ class MarkBot(irc.IRCClient):
     def privmsg(self, user, channel, msg):
         if msg.startswith('.mimic'):
             author = self.findUser(msg.split()[1])
-            if author is self.nickname:
-                self.msg(channel, '.slap ' + user.split('!', 1)[0])
-            elif author in self.users:
-                quote = self.users[author].spit_line()
-                self.msg(channel, '< ' + author + '> ' + quote)                
-            elif not author in self.users:
+            
+            user = self.buildUser(author)
+            if user.empty:
                 self.msg(channel, 'sorry, ' + author + ' was not found')
+            else:
+                quote = user.spit_line()
+                self.msg(channel, '< ' + author + '> ' + quote)                
 
-    def buildUsers(self):
+    def buildUser(self, author):
         f = open(logfile,'r')
+        u = User()
         for line in f:
             if(self.lineCheck(line)):
                 s = line.split()
                 a = self.findUser(s[2])
-                if not a in self.users: 
-                    self.users[a] = User()
+                if not a == author:
+                    continue
                 w = s[3:]
-                self.users[a].add_message(w)
+                u.add_message(w)
+        return u
+        
  
     def findUser(self, author):
         author = author.lstrip(' ')
@@ -80,7 +79,6 @@ class MarkBot(irc.IRCClient):
             author = aliases[author]
         return author
 
-
     def lineCheck(self, line):
         for c in ['-!-', ' * ', '-->', '.mimic', '<--', 'http']: 
             if c in line:
@@ -88,12 +86,14 @@ class MarkBot(irc.IRCClient):
         for c in ['-', ':']:
             if not c in line:
                 return 0
-        return 1;
+        return 1
+
 
 class User:
     def __init__(self):
         self.pre = {}
         self.ribbons = [{} for i in range(maxary)]
+        self.empty = True
 
     def add_pre(self, w):
         words = ' '.join(w) 
@@ -102,17 +102,18 @@ class User:
         self.pre[words] += + 1
 
     def add_message(self, words):
+        self.empty = False
         self.add_pre(words[0:nprefix])
         words.append('EOL')
         for j in range(1,maxary+1): 
             for i in range(nprefix, len(words)):
-                prefix = ' '.join(words[i-j:i])
+                prefix = intern(' '.join(words[i-j:i]))
                 if not prefix in self.ribbons[j-1]:
                     self.ribbons[j-1][prefix] = {}
                 if not words[i] in self.ribbons[j-1][prefix]:
-                    self.ribbons[j-1][prefix][words[i]] = 0;
+                    self.ribbons[j-1][prefix][intern(words[i])] = 0
                 self.ribbons[j-1][prefix][words[i]] += 1
-        
+    
     def spit_word(self, prefix):
         for i in range(maxary,0,-1):
             words = []
@@ -141,6 +142,7 @@ class User:
                     line = line[0:-1]
                     break 
         return ' '.join(line)
+
 
 if __name__ == "__main__":
     f = MarkBotFactory(channel, logfile)
