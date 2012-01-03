@@ -1,6 +1,6 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
-import random
+import random, time, shelve
 
 maxwords = 25
 nprefix = 3
@@ -13,6 +13,7 @@ aliases = ({'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
 server = 'irc.freenode.net'
 channel = '#rhnoise'
 logfile = 'fish_scraps'
+shelffile = 'bookshelf'
 
 class MarkBotFactory(protocol.ClientFactory):
     def __init__(self, channel, filename):
@@ -22,6 +23,7 @@ class MarkBotFactory(protocol.ClientFactory):
     def buildProtocol(self, addr):
         p = MarkBot()
         p.factory = self
+        p.reshelve()
         return p
 
     def clientConnectionLost(self, connector, reason):
@@ -42,17 +44,32 @@ class MarkBot(irc.IRCClient):
 
     def signedOn(self):
         self.join(self.factory.channel)
+    
+    def delayBlast(self, t):
+        payload = self.shelf[t]
+        del self.shelf[t]
+        self.msg(channel, payload)
+        self.shelf.sync()
 
     def privmsg(self, user, channel, msg):
         if msg.startswith('.mimic'):
             author = self.findUser(msg.split()[1])
-            
             user = self.buildUser(author)
             if user.empty:
                 self.msg(channel, 'sorry, ' + author + ' was not found')
             else:
                 quote = user.spit_line()
                 self.msg(channel, '< ' + author + '> ' + quote)                
+        if msg.startswith('.delay'):
+            try: 
+                delay = float(msg.split()[1])
+            except ValueError: 
+                self.msg(channel, 'sorry, that was not a valid delay (must be seconds)')
+                return
+            t = str(time.time() + delay)
+            self.shelf[t] = ' '.join(msg.split()[2:]) 
+            reactor.callLater(delay, self.delayBlast, t)
+            self.shelf.sync()
 
     def buildUser(self, author):
         f = open(logfile,'r')
@@ -66,8 +83,16 @@ class MarkBot(irc.IRCClient):
                 w = s[3:]
                 u.add_message(w)
         return u
-        
- 
+    
+    def reshelve(self):
+        self.shelf = shelve.open(shelffile, writeback=True)
+        for t in self.shelf.keys():
+            if float(t) < time.time():
+                del self.shelf[t]
+            else:
+                reactor.callLater(float(t) - time.time(), self.delayBlast, t)
+        self.shelf.sync()
+
     def findUser(self, author):
         author = author.lstrip(' ')
         author = author.rstrip(' ')
