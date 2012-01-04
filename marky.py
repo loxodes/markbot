@@ -1,18 +1,43 @@
+# marky, the markov chain irc bot
+# jon klein
+# mit license
+# kleinjt@ieee.org
+
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 import random, time, shelve
 
+# cooldown before 
+cooldown = 60 
+
+# upper and lower bound before anti-flooding measures
+minuses = 3
+maxuses = 8
+
+# max chain length
 maxwords = 25
+
+# markov chain max prefix length
 nprefix = 3
+
+# max-ary markov chain
 maxary = 3 
+
+# minimum choices before backing off to lower order markov chain
 minchoices = 2
+
+
 aliases = ({'stentor' : 'loxodes', 'kleinjt' : 'loxodes',
             'topmost' : 'tommost' , 'TBoneULS' : 'baty' ,
             'rthc' : 'chtr' , 'poppy_nogood' : 'chtr' , 'octavious' : 'joshc'})
 
 server = 'irc.freenode.net'
 channel = '#rhnoise'
+
+# filename of weechat style irc log
 logfile = 'fish_scraps'
+
+# filename of shelved .delays
 shelffile = 'bookshelf'
 
 class MarkBotFactory(protocol.ClientFactory):
@@ -35,6 +60,7 @@ class MarkBotFactory(protocol.ClientFactory):
 
 class MarkBot(irc.IRCClient):
     nickname = 'markbot'
+    abusers = {}
 
     def connectionMade(self):
         irc.IRCClient.connectionMade(self)
@@ -51,25 +77,45 @@ class MarkBot(irc.IRCClient):
         self.msg(channel, payload)
         self.shelf.sync()
 
+    def decayAbuse(self, user):
+       self.abusers[user] -= 1 
+
     def privmsg(self, user, channel, msg):
         if msg.startswith('.mimic'):
             author = self.findUser(msg.split()[1])
-            user = self.buildUser(author)
-            if user.empty:
+            
+            # deter flooding..
+            if not user in self.abusers:
+                self.abusers[user] = 0
+            self.abusers[user] += 1
+            reactor.callLater(cooldown, self.decayAbuse, user)
+            if self.abusers[user] > random.randint(minuses, maxuses):
+                self.msg(channel, '< ' + user.split('!')[0] + '> .mimic ' + author)
+                return
+            
+            # attempt to build markov chain for target user, spew sentence fragment 
+            target = self.buildUser(author)
+            if target.empty:
                 self.msg(channel, 'sorry, ' + author + ' was not found')
             else:
-                quote = user.spit_line()
+                quote = target.spit_line()
                 self.msg(channel, '< ' + author + '> ' + quote)                
+        
         if msg.startswith('.delay'):
             try: 
                 delay = float(msg.split()[1])
             except ValueError: 
                 self.msg(channel, 'sorry, that was not a valid delay (must be seconds)')
                 return
-            t = str(time.time() + delay)
+            if delay < 0:
+                return
+            elif delay < time.time():
+                t = str(time.time() + delay)
+            else: 
+                t = str(delay)
+
             self.shelf[t] = ' '.join(msg.split()[2:]) 
             reactor.callLater(delay, self.delayBlast, t)
-            self.shelf.sync()
 
     def buildUser(self, author):
         f = open(logfile,'r')
