@@ -6,13 +6,16 @@
 from twisted.words.protocols import irc
 from twisted.internet import protocol, reactor
 import random, time, shelve
+import parsedatetime
+import parsedatetime.parsedatetime as pdt 
+import parsedatetime.parsedatetime_consts as pdc 
 
 # cooldown before 
 cooldown = 60 
 
 # upper and lower bound before anti-flooding measures
-minuses = 3
-maxuses = 8
+minuses = 2
+maxuses = 4
 
 # max chain length
 maxwords = 25
@@ -40,6 +43,10 @@ logfile = 'fish_scraps'
 # filename of shelved .delays
 shelffile = 'bookshelf'
 
+# parsedatetime constants
+pdc_const = pdc.Constants()
+pdc_cal = pdt.Calendar(pdc_const)
+
 class MarkBotFactory(protocol.ClientFactory):
     def __init__(self, channel, filename):
         self.channel = channel
@@ -60,6 +67,9 @@ class MarkBotFactory(protocol.ClientFactory):
 
 class MarkBot(irc.IRCClient):
     nickname = 'markbot'
+    lineRate = .75
+    maxlength = 220
+
     abusers = {}
 
     def connectionMade(self):
@@ -90,7 +100,7 @@ class MarkBot(irc.IRCClient):
             self.abusers[user] += 1
             reactor.callLater(cooldown, self.decayAbuse, user)
             if self.abusers[user] > random.randint(minuses, maxuses):
-                self.msg(channel, '< ' + user.split('!')[0] + '> .mimic ' + author)
+                self.msg(channel, '.slap ' + user.split('!')[0])
                 return
             
             # attempt to build markov chain for target user, spew sentence fragment 
@@ -102,20 +112,16 @@ class MarkBot(irc.IRCClient):
                 self.msg(channel, '< ' + author + '> ' + quote)                
         
         if msg.startswith('.delay'):
-            try: 
-                delay = float(msg.split()[1])
-            except ValueError: 
-                self.msg(channel, 'sorry, that was not a valid delay (must be seconds)')
-                return
+            delay = time.mktime(pdc_cal.parse(msg.split(';')[0].lstrip('.delay '))[0]) - time.mktime(time.gmtime())
             if delay < 0:
                 return
-            elif delay < time.time():
-                t = str(time.time() + delay)
-            else: 
-                t = str(delay)
-
-            self.shelf[t] = ' '.join(msg.split()[2:]) 
+            t = str(delay)
+            self.shelf[t] = (msg.split(';')[-1].lstrip(' '))
             reactor.callLater(delay, self.delayBlast, t)
+        
+        # insecure, but entertaining
+        #if msg.startswith('.eval'):
+        #    self.msg(channel, str(eval(' '.join(msg.split(' ')[1:]))), length=self.maxlength)
 
     def buildUser(self, author):
         f = open(logfile,'r')
