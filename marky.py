@@ -121,7 +121,11 @@ class MarkBot(irc.IRCClient):
         
         # insecure, but entertaining
         #if msg.startswith('.eval'):
-        #    self.msg(channel, str(eval(' '.join(msg.split(' ')[1:]))), length=self.maxlength)
+        #    try:
+        #        self.msg(channel, str(eval(' '.join(msg.split(' ')[1:]))), length=self.maxlength)
+        #    except Exception as err:
+        #        nick = user.split("!")[0]
+        #        self.msg(nick, "Error: " + str(err))
 
     def buildUser(self, author):
         f = open(logfile,'r')
